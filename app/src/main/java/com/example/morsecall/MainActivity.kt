@@ -18,6 +18,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -62,9 +63,15 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(navController: NavController) {
+    val context = LocalContext.current
     var lastTapTime by remember { mutableStateOf(0L) }
     var tapCount by remember { mutableStateOf(0) }
     val tapLog = remember { mutableStateListOf<String>() }
+    
+    // Load tap configuration settings
+    val dotDuration = remember { loadDotDuration(context) }
+    val dashDuration = remember { loadDashDuration(context) }
+    val pauseDuration = remember { loadPauseDuration(context) }
 
     Scaffold(
         topBar = {
@@ -102,6 +109,14 @@ fun MainScreen(navController: NavController) {
                 text = "Tap the button below in your Morse pattern.",
                 fontSize = 18.sp,
                 textAlign = TextAlign.Center,
+                modifier = Modifier.padding(bottom = 10.dp)
+            )
+            
+            Text(
+                text = "Dot: <${dotDuration}ms | Dash: >${dashDuration}ms | Pause: >${pauseDuration}ms",
+                fontSize = 12.sp,
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.outline,
                 modifier = Modifier.padding(bottom = 20.dp)
             )
 
@@ -116,9 +131,11 @@ fun MainScreen(navController: NavController) {
                                 val currentTime = System.currentTimeMillis()
                                 val pressTime = currentTime
                                 if (lastTapTime != 0L) {
-                                    val pauseDuration = currentTime - lastTapTime
-                                    Log.d("MORSE_TAP", "Pause: $pauseDuration ms")
-                                    tapLog.add(0, "Pause: $pauseDuration ms")
+                                    val actualPauseDuration = currentTime - lastTapTime
+                                    if (actualPauseDuration > pauseDuration) {
+                                        Log.d("MORSE_TAP", "Long pause: $actualPauseDuration ms")
+                                        tapLog.add(0, "Long pause: $actualPauseDuration ms")
+                                    }
                                 }
                                 Log.d("MORSE_TAP", "Pressed at $pressTime")
                                 tapLog.add(0, "Pressed")
@@ -126,8 +143,9 @@ fun MainScreen(navController: NavController) {
                                     awaitRelease()
                                     val releaseTime = System.currentTimeMillis()
                                     val tapDuration = releaseTime - pressTime
-                                    Log.d("MORSE_TAP", "Tap Duration: $tapDuration ms")
-                                    tapLog.add(0, "Tap: $tapDuration ms")
+                                    val symbol = if (tapDuration < dotDuration) "." else "-"
+                                    Log.d("MORSE_TAP", "Tap Duration: $tapDuration ms -> $symbol")
+                                    tapLog.add(0, "$symbol ($tapDuration ms)")
                                     tapCount++
                                     lastTapTime = releaseTime
                                 } catch (e: GestureCancellationException) {

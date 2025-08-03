@@ -1,21 +1,112 @@
 package com.example.morsecall
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
+import android.app.Activity
+import android.content.Context
+import android.content.Intent
+import android.media.Ringtone
+import android.media.RingtoneManager
+import android.net.Uri
+import android.util.Log
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+
+// SharedPreferences keys
+private const val KEY_RINGTONE_URI = "ringtone_uri"
+private const val KEY_DOT_DURATION = "dot_duration"
+private const val KEY_DASH_DURATION = "dash_duration"
+private const val KEY_PAUSE_DURATION = "pause_duration"
+
+// Helper functions for SharedPreferences
+fun saveRingtoneUri(context: Context, uri: Uri?) {
+    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    prefs.edit().putString(KEY_RINGTONE_URI, uri?.toString()).apply()
+    Log.d("SettingsScreen", "Saved ringtone URI: $uri")
+}
+
+fun loadRingtoneUri(context: Context): Uri? {
+    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    val uriString = prefs.getString(KEY_RINGTONE_URI, null)
+    return uriString?.let { Uri.parse(it) }
+}
+
+fun getRingtoneTitle(context: Context, uri: Uri?): String {
+    if (uri == null) return "Default Ringtone"
+    return try {
+        val ringtone: Ringtone? = RingtoneManager.getRingtone(context, uri)
+        ringtone?.getTitle(context) ?: "Unknown Ringtone"
+    } catch (e: Exception) {
+        Log.e("SettingsScreen", "Error getting ringtone title", e)
+        "Error loading title"
+    }
+}
+
+fun saveDotDuration(context: Context, duration: Int) {
+    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    prefs.edit().putInt(KEY_DOT_DURATION, duration).apply()
+    Log.d("SettingsScreen", "Saved dot duration: $duration ms")
+}
+
+fun loadDotDuration(context: Context): Int {
+    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    return prefs.getInt(KEY_DOT_DURATION, 250) // Default 250ms
+}
+
+fun saveDashDuration(context: Context, duration: Int) {
+    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    prefs.edit().putInt(KEY_DASH_DURATION, duration).apply()
+    Log.d("SettingsScreen", "Saved dash duration: $duration ms")
+}
+
+fun loadDashDuration(context: Context): Int {
+    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    return prefs.getInt(KEY_DASH_DURATION, 750) // Default 750ms
+}
+
+fun savePauseDuration(context: Context, duration: Int) {
+    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    prefs.edit().putInt(KEY_PAUSE_DURATION, duration).apply()
+    Log.d("SettingsScreen", "Saved pause duration: $duration ms")
+}
+
+fun loadPauseDuration(context: Context): Int {
+    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    return prefs.getInt(KEY_PAUSE_DURATION, 500) // Default 500ms
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(navController: NavController) {
+    val context = LocalContext.current
+    
+    var selectedRingtoneUri by remember { mutableStateOf(loadRingtoneUri(context)) }
+    var selectedRingtoneTitle by remember { mutableStateOf(getRingtoneTitle(context, selectedRingtoneUri)) }
+    var dotDuration by remember { mutableStateOf(loadDotDuration(context)) }
+    var dashDuration by remember { mutableStateOf(loadDashDuration(context)) }
+    var pauseDuration by remember { mutableStateOf(loadPauseDuration(context)) }
+
+    val ringtonePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val uri = result.data?.getParcelableExtra<Uri>(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
+            selectedRingtoneUri = uri
+            saveRingtoneUri(context, uri)
+            selectedRingtoneTitle = getRingtoneTitle(context, uri)
+            Log.d("SettingsScreen", "Selected ringtone URI: $uri")
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -43,22 +134,132 @@ fun SettingsScreen(navController: NavController) {
                 .fillMaxSize()
                 .padding(innerPadding)
                 .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                text = "Settings will go here.",
-                style = MaterialTheme.typography.headlineSmall
+                text = "Configure your preferences",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(bottom = 8.dp)
             )
 
-            Button(onClick = { /* TODO: Implement Ringtone Picker */ }) {
-                Text("Set Ringtone (Placeholder)")
+            // Ringtone Setting Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = {
+                    val intent = Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
+                        putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_RINGTONE)
+                        putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "Select Ringtone")
+                        putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, selectedRingtoneUri)
+                    }
+                    ringtonePickerLauncher.launch(intent)
+                }
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Ringtone", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            selectedRingtoneTitle, 
+                            style = MaterialTheme.typography.bodyMedium, 
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.Filled.KeyboardArrowRight, 
+                        contentDescription = "Select Ringtone"
+                    )
+                }
             }
 
-            Button(onClick = { /* TODO: Implement Tap Pattern Setting */ }) {
-                Text("Set Tap Pattern (Placeholder)")
+            // Tap Configuration Section
+            Text(
+                text = "Tap Configuration",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+
+            // Dot Duration Slider
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    Text(
+                        text = "Dot Duration: ${dotDuration}ms",
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Slider(
+                        value = dotDuration.toFloat(),
+                        onValueChange = { 
+                            dotDuration = it.toInt()
+                            saveDotDuration(context, dotDuration)
+                        },
+                        valueRange = 100f..500f,
+                        steps = 39 // 400ms range / 10ms steps
+                    )
+                    Text(
+                        text = "Short taps (dots) duration",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
             }
 
+            // Dash Duration Slider
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    Text(
+                        text = "Dash Duration: ${dashDuration}ms",
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Slider(
+                        value = dashDuration.toFloat(),
+                        onValueChange = { 
+                            dashDuration = it.toInt()
+                            saveDashDuration(context, dashDuration)
+                        },
+                        valueRange = 500f..1500f,
+                        steps = 99 // 1000ms range / 10ms steps
+                    )
+                    Text(
+                        text = "Long taps (dashes) duration",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
+            }
+
+            // Pause Duration Slider
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    Text(
+                        text = "Pause Duration: ${pauseDuration}ms",
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Slider(
+                        value = pauseDuration.toFloat(),
+                        onValueChange = { 
+                            pauseDuration = it.toInt()
+                            savePauseDuration(context, pauseDuration)
+                        },
+                        valueRange = 200f..1000f,
+                        steps = 79 // 800ms range / 10ms steps
+                    )
+                    Text(
+                        text = "Pause between symbols",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
+            }
         }
     }
 }
