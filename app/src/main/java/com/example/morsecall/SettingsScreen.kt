@@ -26,6 +26,7 @@ private const val KEY_RINGTONE_URI = "ringtone_uri"
 private const val KEY_DOT_DURATION = "dot_duration"
 private const val KEY_DASH_DURATION = "dash_duration"
 private const val KEY_PAUSE_DURATION = "pause_duration"
+private const val KEY_TAP_TRIGGER_COUNT = "tap_trigger_count"
 
 // Helper functions for SharedPreferences
 fun saveRingtoneUri(context: Context, uri: Uri?) {
@@ -84,6 +85,17 @@ fun loadPauseDuration(context: Context): Int {
     return prefs.getInt(KEY_PAUSE_DURATION, 500) // Default 500ms
 }
 
+fun saveTapTriggerCount(context: Context, count: Int) {
+    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    prefs.edit().putInt(KEY_TAP_TRIGGER_COUNT, count).apply()
+    Log.d("SettingsScreen", "Saved tap trigger count: $count")
+}
+
+fun loadTapTriggerCount(context: Context): Int {
+    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    return prefs.getInt(KEY_TAP_TRIGGER_COUNT, 2) // Default 2 taps
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(navController: NavController) {
@@ -94,6 +106,7 @@ fun SettingsScreen(navController: NavController) {
     var dotDuration by remember { mutableStateOf(loadDotDuration(context)) }
     var dashDuration by remember { mutableStateOf(loadDashDuration(context)) }
     var pauseDuration by remember { mutableStateOf(loadPauseDuration(context)) }
+    var tapTriggerCount by remember { mutableStateOf(loadTapTriggerCount(context)) }
 
     val ringtonePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -212,6 +225,39 @@ fun SettingsScreen(navController: NavController) {
                     )
                     Text(
                         text = "Adjust how sensitive the app is to your tapping speed",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
+            }
+
+            // Tap Trigger Count Section
+            Text(
+                text = "Ringtone Trigger",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+
+            // Tap Trigger Count Slider
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    Text(
+                        text = "Taps to trigger ringtone: $tapTriggerCount",
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Slider(
+                        value = tapTriggerCount.toFloat(),
+                        onValueChange = { 
+                            tapTriggerCount = it.toInt()
+                            saveTapTriggerCount(context, tapTriggerCount)
+                        },
+                        valueRange = 1f..10f,
+                        steps = 8
+                    )
+                    Text(
+                        text = "Number of consecutive taps needed to play ringtone",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.outline
                     )

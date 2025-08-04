@@ -75,6 +75,7 @@ fun MainScreen(navController: NavController) {
     val dotDuration = remember { loadDotDuration(context) }
     val dashDuration = remember { loadDashDuration(context) }
     val pauseDuration = remember { loadPauseDuration(context) }
+    val tapTriggerCount = remember { loadTapTriggerCount(context) }
     
     // Load ringtone
     val selectedRingtoneUri = remember { loadRingtoneUri(context) }
@@ -155,12 +156,12 @@ fun MainScreen(navController: NavController) {
                     val timeSinceLastTap = if (lastTapTime != 0L) currentTime - lastTapTime else 0L
                     if (timeSinceLastTap < 3000 && timeSinceLastTap > 0) {
                         consecutiveTapCount++
-                        if (consecutiveTapCount >= 2) {
-                            // Play ringtone after 2 consecutive taps
+                        if (consecutiveTapCount >= tapTriggerCount) {
+                            // Play ringtone after configured number of consecutive taps
                             ringtone?.play()
                             consecutiveTapCount = 0
                             tapLog.add(0, "🎵 RINGTONE PLAYING!")
-                            Log.d("MORSE_TAP", "Ringtone triggered after 2 taps!")
+                            Log.d("MORSE_TAP", "Ringtone triggered after $tapTriggerCount taps!")
                         }
                     } else {
                         // Reset consecutive count if too much time passed or first tap
@@ -189,7 +190,7 @@ fun MainScreen(navController: NavController) {
                 fontSize = 16.sp
             )
             Text(
-                text = "Consecutive Taps: $consecutiveTapCount/2",
+                text = "Consecutive Taps: $consecutiveTapCount/$tapTriggerCount",
                 fontSize = 14.sp,
                 color = if (consecutiveTapCount >= 1) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
             )
