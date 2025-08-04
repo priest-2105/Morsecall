@@ -176,85 +176,42 @@ fun SettingsScreen(navController: NavController) {
                 }
             }
 
-            // Tap Configuration Section
+            // Tap Sensitivity Section
             Text(
-                text = "Tap Configuration",
+                text = "Tap Sensitivity",
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(top = 8.dp)
             )
 
-            // Dot Duration Slider
+            // Simple Sensitivity Slider
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(
                     modifier = Modifier.padding(16.dp)
                 ) {
                     Text(
-                        text = "Dot Duration: ${dotDuration}ms",
+                        text = when {
+                            dotDuration <= 150 -> "Very Fast"
+                            dotDuration <= 250 -> "Fast"
+                            dotDuration <= 350 -> "Normal"
+                            dotDuration <= 450 -> "Slow"
+                            else -> "Very Slow"
+                        },
                         style = MaterialTheme.typography.titleSmall
                     )
                     Slider(
                         value = dotDuration.toFloat(),
                         onValueChange = { 
-                            dotDuration = it.toInt()
+                            val newDotDuration = it.toInt()
+                            dotDuration = newDotDuration
+                            dashDuration = newDotDuration * 3 // Auto-calculate dash
                             saveDotDuration(context, dotDuration)
-                        },
-                        valueRange = 100f..500f,
-                        steps = 39 // 400ms range / 10ms steps
-                    )
-                    Text(
-                        text = "Short taps (dots) duration",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.outline
-                    )
-                }
-            }
-
-            // Dash Duration Slider
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.padding(16.dp)
-                ) {
-                    Text(
-                        text = "Dash Duration: ${dashDuration}ms",
-                        style = MaterialTheme.typography.titleSmall
-                    )
-                    Slider(
-                        value = dashDuration.toFloat(),
-                        onValueChange = { 
-                            dashDuration = it.toInt()
                             saveDashDuration(context, dashDuration)
                         },
-                        valueRange = 500f..1500f,
-                        steps = 99 // 1000ms range / 10ms steps
+                        valueRange = 100f..500f,
+                        steps = 39
                     )
                     Text(
-                        text = "Long taps (dashes) duration",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.outline
-                    )
-                }
-            }
-
-            // Pause Duration Slider
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.padding(16.dp)
-                ) {
-                    Text(
-                        text = "Pause Duration: ${pauseDuration}ms",
-                        style = MaterialTheme.typography.titleSmall
-                    )
-                    Slider(
-                        value = pauseDuration.toFloat(),
-                        onValueChange = { 
-                            pauseDuration = it.toInt()
-                            savePauseDuration(context, pauseDuration)
-                        },
-                        valueRange = 200f..1000f,
-                        steps = 79 // 800ms range / 10ms steps
-                    )
-                    Text(
-                        text = "Pause between symbols",
+                        text = "Adjust how sensitive the app is to your tapping speed",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.outline
                     )

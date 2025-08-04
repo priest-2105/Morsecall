@@ -23,6 +23,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import android.media.Ringtone
+import android.media.RingtoneManager
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -66,12 +68,28 @@ fun MainScreen(navController: NavController) {
     val context = LocalContext.current
     var lastTapTime by remember { mutableStateOf(0L) }
     var tapCount by remember { mutableStateOf(0) }
+    var consecutiveTapCount by remember { mutableStateOf(0) }
     val tapLog = remember { mutableStateListOf<String>() }
     
     // Load tap configuration settings
     val dotDuration = remember { loadDotDuration(context) }
     val dashDuration = remember { loadDashDuration(context) }
     val pauseDuration = remember { loadPauseDuration(context) }
+    
+    // Load ringtone
+    val selectedRingtoneUri = remember { loadRingtoneUri(context) }
+    var ringtone by remember { mutableStateOf<Ringtone?>(null) }
+    
+    // Initialize ringtone
+    LaunchedEffect(selectedRingtoneUri) {
+        ringtone = selectedRingtoneUri?.let { uri ->
+            try {
+                RingtoneManager.getRingtone(context, uri)
+            } catch (e: Exception) {
+                null
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -113,7 +131,15 @@ fun MainScreen(navController: NavController) {
             )
             
             Text(
-                text = "Dot: <${dotDuration}ms | Dash: >${dashDuration}ms | Pause: >${pauseDuration}ms",
+                text = "Sensitivity: ${
+                    when {
+                        dotDuration <= 150 -> "Very Fast"
+                        dotDuration <= 250 -> "Fast"
+                        dotDuration <= 350 -> "Normal"
+                        dotDuration <= 450 -> "Slow"
+                        else -> "Very Slow"
+                    }
+                }",
                 fontSize = 12.sp,
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.outline,
@@ -121,40 +147,30 @@ fun MainScreen(navController: NavController) {
             )
 
             Button(
-                onClick = { /* Primary action handled by pointerInput */ },
-                modifier = Modifier
-                    .fillMaxWidth(0.8f)
-                    .aspectRatio(1f)
-                    .pointerInput(Unit) {
-                        detectTapGestures(
-                            onPress = {
-                                val currentTime = System.currentTimeMillis()
-                                val pressTime = currentTime
-                                if (lastTapTime != 0L) {
-                                    val actualPauseDuration = currentTime - lastTapTime
-                                    if (actualPauseDuration > pauseDuration) {
-                                        Log.d("MORSE_TAP", "Long pause: $actualPauseDuration ms")
-                                        tapLog.add(0, "Long pause: $actualPauseDuration ms")
-                                    }
-                                }
-                                Log.d("MORSE_TAP", "Pressed at $pressTime")
-                                tapLog.add(0, "Pressed")
-                                try {
-                                    awaitRelease()
-                                    val releaseTime = System.currentTimeMillis()
-                                    val tapDuration = releaseTime - pressTime
-                                    val symbol = if (tapDuration < dotDuration) "." else "-"
-                                    Log.d("MORSE_TAP", "Tap Duration: $tapDuration ms -> $symbol")
-                                    tapLog.add(0, "$symbol ($tapDuration ms)")
-                                    tapCount++
-                                    lastTapTime = releaseTime
-                                } catch (e: GestureCancellationException) {
-                                    Log.d("MORSE_TAP", "Tap cancelled")
-                                    tapLog.add(0, "Cancelled")
-                                }
-                            }
-                        )
-                    },
+                onClick = {
+                    val currentTime = System.currentTimeMillis()
+                    tapCount++
+                    
+                    // Check for consecutive taps (within 3 seconds)
+                    val timeSinceLastTap = if (lastTapTime != 0L) currentTime - lastTapTime else 0L
+                    if (timeSinceLastTap < 3000 && timeSinceLastTap > 0) {
+                        consecutiveTapCount++
+                        if (consecutiveTapCount >= 2) {
+                            // Play ringtone after 2 consecutive taps
+                            ringtone?.play()
+                            consecutiveTapCount = 0
+                            tapLog.add(0, "🎵 RINGTONE PLAYING!")
+                            Log.d("MORSE_TAP", "Ringtone triggered after 2 taps!")
+                        }
+                    } else {
+                        // Reset consecutive count if too much time passed or first tap
+                        consecutiveTapCount = 1
+                    }
+                    lastTapTime = currentTime
+                    
+                    tapLog.add(0, "Tap #$tapCount (Consecutive: $consecutiveTapCount)")
+                    Log.d("MORSE_TAP", "Tap detected: #$tapCount, Consecutive: $consecutiveTapCount")
+                },
                 shape = MaterialTheme.shapes.medium,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary
@@ -169,8 +185,13 @@ fun MainScreen(navController: NavController) {
 
             Spacer(modifier = Modifier.height(20.dp))
             Text(
-                text = "Taps Registered: $tapCount",
+                text = "Total Taps: $tapCount",
                 fontSize = 16.sp
+            )
+            Text(
+                text = "Consecutive Taps: $consecutiveTapCount/2",
+                fontSize = 14.sp,
+                color = if (consecutiveTapCount >= 1) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
             )
             if (tapLog.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(10.dp))
