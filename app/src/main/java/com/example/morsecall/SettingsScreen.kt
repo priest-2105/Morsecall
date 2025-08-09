@@ -216,7 +216,7 @@ fun SettingsScreen(navController: NavController) {
                         onValueChange = { 
                             val newDotDuration = it.toInt()
                             dotDuration = newDotDuration
-                            dashDuration = newDotDuration * 3 // Auto-calculate dash
+                            dashDuration = newDotDuration * 3
                             saveDotDuration(context, dotDuration)
                             saveDashDuration(context, dashDuration)
                         },

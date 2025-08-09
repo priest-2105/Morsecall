@@ -69,6 +69,8 @@ fun MainScreen(navController: NavController) {
     var lastTapTime by remember { mutableStateOf(0L) }
     var tapCount by remember { mutableStateOf(0) }
     var consecutiveTapCount by remember { mutableStateOf(0) }
+    var isActive by remember { mutableStateOf(false) }
+    var isPlaying by remember { mutableStateOf(false) }
     val tapLog = remember { mutableStateListOf<String>() }
     
     // Load tap configuration settings
@@ -144,47 +146,101 @@ fun MainScreen(navController: NavController) {
                 fontSize = 12.sp,
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.outline,
-                modifier = Modifier.padding(bottom = 20.dp)
+                modifier = Modifier.padding(bottom = 10.dp)
             )
 
+            // Activate/Deactivate Button
             Button(
-                onClick = {
-                    val currentTime = System.currentTimeMillis()
-                    tapCount++
-                    
-                    // Check for consecutive taps (within 3 seconds)
-                    val timeSinceLastTap = if (lastTapTime != 0L) currentTime - lastTapTime else 0L
-                    if (timeSinceLastTap < 3000 && timeSinceLastTap > 0) {
-                        consecutiveTapCount++
-                        if (consecutiveTapCount >= tapTriggerCount) {
-                            // Play ringtone after configured number of consecutive taps
-                            ringtone?.play()
-                            consecutiveTapCount = 0
-                            tapLog.add(0, "🎵 RINGTONE PLAYING!")
-                            Log.d("MORSE_TAP", "Ringtone triggered after $tapTriggerCount taps!")
-                        }
+                onClick = { 
+                    isActive = !isActive
+                    if (isActive) {
+                        tapLog.add(0, "✅ App ACTIVATED")
+                        Log.d("MORSE_TAP", "App activated")
                     } else {
-                        // Reset consecutive count if too much time passed or first tap
-                        consecutiveTapCount = 1
+                        tapLog.add(0, "❌ App DEACTIVATED")
+                        Log.d("MORSE_TAP", "App deactivated")
                     }
-                    lastTapTime = currentTime
-                    
-                    tapLog.add(0, "Tap #$tapCount (Consecutive: $consecutiveTapCount)")
-                    Log.d("MORSE_TAP", "Tap detected: #$tapCount, Consecutive: $consecutiveTapCount")
                 },
-                shape = MaterialTheme.shapes.medium,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary
-                )
+                    containerColor = if (isActive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                ),
+                modifier = Modifier.padding(bottom = 20.dp)
             ) {
                 Text(
-                    text = "TAP HERE",
-                    fontSize = 32.sp,
+                    text = if (isActive) "DEACTIVATE" else "ACTIVATE",
+                    fontSize = 16.sp,
                     color = MaterialTheme.colorScheme.onPrimary
                 )
             }
 
+            Button(
+                onClick = {
+                    if (isActive) {
+                        val currentTime = System.currentTimeMillis()
+                        tapCount++
+                        
+                        // Check for consecutive taps (within 3 seconds)
+                        val timeSinceLastTap = if (lastTapTime != 0L) currentTime - lastTapTime else 0L
+                        if (timeSinceLastTap < 3000 && timeSinceLastTap > 0) {
+                            consecutiveTapCount++
+                                                    if (consecutiveTapCount >= tapTriggerCount) {
+                            // Play ringtone after configured number of consecutive taps
+                            ringtone?.play()
+                            isPlaying = true
+                            consecutiveTapCount = 0
+                            tapLog.add(0, "🎵 RINGTONE PLAYING!")
+                            Log.d("MORSE_TAP", "Ringtone triggered after $tapTriggerCount taps!")
+                        }
+                        } else {
+                            // Reset consecutive count if too much time passed or first tap
+                            consecutiveTapCount = 1
+                        }
+                        lastTapTime = currentTime
+                        
+                        tapLog.add(0, "Tap #$tapCount (Consecutive: $consecutiveTapCount)")
+                        Log.d("MORSE_TAP", "Tap detected: #$tapCount, Consecutive: $consecutiveTapCount")
+                    } else {
+                        tapLog.add(0, "⚠️ App is not active - tap ignored")
+                        Log.d("MORSE_TAP", "Tap ignored - app not active")
+                    }
+                },
+                shape = MaterialTheme.shapes.medium,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                ),
+                enabled = true
+            ) {
+                Text(
+                    text = if (isActive) "TAP HERE" else "TAP HERE (INACTIVE)",
+                    fontSize = 32.sp,
+                    color = if (isActive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
             Spacer(modifier = Modifier.height(20.dp))
+            
+            // Stop Button (only shows when ringtone is playing)
+            if (isPlaying) {
+                Button(
+                    onClick = {
+                        ringtone?.stop()
+                        isPlaying = false
+                        tapLog.add(0, "⏹️ RINGTONE STOPPED")
+                        Log.d("MORSE_TAP", "Ringtone stopped manually")
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    ),
+                    modifier = Modifier.padding(bottom = 10.dp)
+                ) {
+                    Text(
+                        text = "STOP RINGTONE",
+                        fontSize = 16.sp,
+                        color = MaterialTheme.colorScheme.onError
+                    )
+                }
+            }
+            
             Text(
                 text = "Total Taps: $tapCount",
                 fontSize = 16.sp
