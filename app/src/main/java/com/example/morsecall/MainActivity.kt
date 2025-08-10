@@ -157,8 +157,20 @@ fun MainScreen(navController: NavController) {
                         tapLog.add(0, "✅ App ACTIVATED")
                         Log.d("MORSE_TAP", "App activated")
                     } else {
+                        // Stop ringtone if currently playing
+                        if (isPlaying) {
+                            ringtone?.stop()
+                            isPlaying = false
+                            tapLog.add(0, "⏹️ RINGTONE STOPPED (deactivated)")
+                            Log.d("MORSE_TAP", "Ringtone stopped due to deactivation")
+                        }
+                        // Reset tap counters/state
+                        tapCount = 0
+                        consecutiveTapCount = 0
+                        lastTapTime = 0L
+                        tapLog.add(0, "🔄 Counters reset")
                         tapLog.add(0, "❌ App DEACTIVATED")
-                        Log.d("MORSE_TAP", "App deactivated")
+                        Log.d("MORSE_TAP", "App deactivated and counters reset")
                     }
                 },
                 colors = ButtonDefaults.buttonColors(
