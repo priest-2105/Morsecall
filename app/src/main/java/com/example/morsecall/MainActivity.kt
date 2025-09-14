@@ -39,6 +39,13 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.morsecall.ui.theme.MorsecallTheme
+import com.example.morsecall.service.MorsecallServiceManager
+import com.example.morsecall.service.NotificationChannelManager
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 
 // Define navigation routes
 object AppDestinations {
@@ -47,9 +54,30 @@ object AppDestinations {
 }
 
 class MainActivity : ComponentActivity() {
+    
+    companion object {
+        private const val NOTIFICATION_PERMISSION_REQUEST_CODE = 1001
+    }
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        
+        // Create notification channel
+        NotificationChannelManager.createNotificationChannel(this)
+        
+        // Request notification permission for Android 13+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) 
+                != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                    NOTIFICATION_PERMISSION_REQUEST_CODE
+                )
+            }
+        }
+        
         setContent {
             MorsecallTheme {
                 // Set up the NavController
@@ -76,31 +104,37 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainScreen(navController: NavController) {
     val context = LocalContext.current
-    var lastTapTime by remember { mutableStateOf(0L) }
+    var isActive by remember { mutableStateOf(false) }
     var tapCount by remember { mutableStateOf(0) }
     var consecutiveTapCount by remember { mutableStateOf(0) }
-    var isActive by remember { mutableStateOf(false) }
-    var isPlaying by remember { mutableStateOf(false) }
+    var isServiceEnabled by remember { mutableStateOf(false) }
     val tapLog = remember { mutableStateListOf<String>() }
     
+    // Check if accessibility service is enabled
+    LaunchedEffect(Unit) {
+        isServiceEnabled = MorsecallServiceManager.isAccessibilityServiceEnabled(context)
+    }
+    
     // Load tap configuration settings
-    val dotDuration = remember { loadDotDuration(context) }
-    val dashDuration = remember { loadDashDuration(context) }
-    val pauseDuration = remember { loadPauseDuration(context) }
     val tapTriggerCount = remember { loadTapTriggerCount(context) }
     
-    // Load ringtone
-    val selectedRingtoneUri = remember { loadRingtoneUri(context) }
-    var ringtone by remember { mutableStateOf<Ringtone?>(null) }
-    
-    // Initialize ringtone
-    LaunchedEffect(selectedRingtoneUri) {
-        ringtone = selectedRingtoneUri?.let { uri ->
-            try {
-                RingtoneManager.getRingtone(context, uri)
-            } catch (e: Exception) {
-                null
+    // Update tap counts from service and sync state
+    LaunchedEffect(Unit) {
+        while (true) {
+            val service = MorsecallServiceManager.getServiceInstance()
+            if (service != null) {
+                // Sync the active state from service
+                val serviceActive = service.isServiceActive()
+                if (serviceActive != isActive) {
+                    isActive = serviceActive
+                }
+                
+                if (isActive) {
+                    tapCount = service.getTapCount()
+                    consecutiveTapCount = service.getConsecutiveTapCount()
+                }
             }
+            kotlinx.coroutines.delay(500) // Update every 500ms
         }
     }
 
@@ -138,29 +172,68 @@ fun MainScreen(navController: NavController) {
         ) {
             // Minimal, icon-forward UI
 
+            // Service Status Card
+            if (!isServiceEnabled) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "Accessibility Service Required",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Enable Morsecall in Accessibility Settings to detect taps system-wide",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Button(
+                            onClick = {
+                                MorsecallServiceManager.openAccessibilitySettings(context)
+                                tapLog.add(0, "🔧 Opening Accessibility Settings")
+                            }
+                        ) {
+                            Text("Open Settings")
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
             // Activate/Deactivate Button
             // Circular power toggle
             FilledTonalIconButton(
                 onClick = { 
+                    if (!isServiceEnabled) {
+                        tapLog.add(0, "⚠️ Enable accessibility service first")
+                        return@FilledTonalIconButton
+                    }
+                    
+                    val service = MorsecallServiceManager.getServiceInstance()
+                    if (service == null) {
+                        tapLog.add(0, "⚠️ Accessibility service not connected")
+                        return@FilledTonalIconButton
+                    }
+                    
                     isActive = !isActive
+                    service.setActive(isActive)
+                    
                     if (isActive) {
-                        tapLog.add(0, "✅ App ACTIVATED")
-                        Log.d("MORSE_TAP", "App activated")
+                        tapLog.add(0, "✅ Background Service ACTIVATED")
+                        Log.d("MORSE_TAP", "Background service activated")
                     } else {
-                        // Stop ringtone if currently playing
-                        if (isPlaying) {
-                            ringtone?.stop()
-                            isPlaying = false
-                            tapLog.add(0, "⏹️ RINGTONE STOPPED (deactivated)")
-                            Log.d("MORSE_TAP", "Ringtone stopped due to deactivation")
-                        }
-                        // Reset tap counters/state
-                        tapCount = 0
-                        consecutiveTapCount = 0
-                        lastTapTime = 0L
-                        tapLog.add(0, "🔄 Counters reset")
-                        tapLog.add(0, "❌ App DEACTIVATED")
-                        Log.d("MORSE_TAP", "App deactivated and counters reset")
+                        tapLog.add(0, "❌ Background Service DEACTIVATED")
+                        Log.d("MORSE_TAP", "Background service deactivated")
                     }
                 },
                 modifier = Modifier.size(80.dp),
@@ -176,90 +249,43 @@ fun MainScreen(navController: NavController) {
                 )
             }
 
-            // Animated pulse on the main tap area
-            Button(
-                onClick = {
-                    if (isActive) {
-                        val currentTime = System.currentTimeMillis()
-                        tapCount++
-                        
-                        // Check for consecutive taps (within 3 seconds)
-                        val timeSinceLastTap = if (lastTapTime != 0L) currentTime - lastTapTime else 0L
-                        if (timeSinceLastTap < 3000 && timeSinceLastTap > 0) {
-                            consecutiveTapCount++
-                            if (consecutiveTapCount >= tapTriggerCount) {
-                            // Play ringtone after configured number of consecutive taps
-                            ringtone?.play()
-                            isPlaying = true
-                            consecutiveTapCount = 0
-                            tapLog.add(0, "🎵 RINGTONE PLAYING!")
-                            Log.d("MORSE_TAP", "Ringtone triggered after $tapTriggerCount taps!")
-                        }
-                        } else {
-                            // Reset consecutive count if too much time passed or first tap
-                            consecutiveTapCount = 1
-                        }
-                        lastTapTime = currentTime
-                        
-                        tapLog.add(0, "Tap #$tapCount (Consecutive: $consecutiveTapCount)")
-                        Log.d("MORSE_TAP", "Tap detected: #$tapCount, Consecutive: $consecutiveTapCount")
-                    } else {
-                        tapLog.add(0, "⚠️ App is not active - tap ignored")
-                        Log.d("MORSE_TAP", "Tap ignored - app not active")
-                    }
-                },
-                shape = MaterialTheme.shapes.large,
-                modifier = run {
-                    val base = Modifier
-                        .fillMaxWidth()
-                        .height(120.dp)
-                    if (isActive) {
-                        val infinite = rememberInfiniteTransition(label = "pulse")
-                        val scale = infinite.animateFloat(
-                            initialValue = 0.98f,
-                            targetValue = 1.02f,
-                            animationSpec = infiniteRepeatable(
-                                animation = tween(durationMillis = 800),
-                                repeatMode = RepeatMode.Reverse
-                            ),
-                            label = "scale"
-                        )
-                        base.graphicsLayer(scaleX = scale.value, scaleY = scale.value)
-                    } else base
-                },
-                enabled = true,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+            // Status Display Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isActive) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
                 )
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Icon(
                     imageVector = Icons.Filled.TouchApp,
-                    contentDescription = "Tap",
-                    tint = if (isActive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(40.dp)
-                )
+                        contentDescription = "Tap Detection",
+                        modifier = Modifier.size(48.dp),
+                        tint = if (isActive) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = if (isActive) "System-wide tap detection active" else "Tap detection inactive",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = if (isActive) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                    if (isActive) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Tap anywhere on your device to trigger ringtone",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(20.dp))
-            
-            // Stop Button (only shows when ringtone is playing)
-            if (isPlaying) {
-                FilledTonalIconButton(
-                    onClick = {
-                        ringtone?.stop()
-                        isPlaying = false
-                        tapLog.add(0, "⏹️ RINGTONE STOPPED")
-                        Log.d("MORSE_TAP", "Ringtone stopped manually")
-                    },
-                    colors = IconButtonDefaults.filledTonalIconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer
-                    ),
-                    modifier = Modifier.padding(bottom = 10.dp)
-                ) {
-                    Icon(imageVector = Icons.Filled.Stop, contentDescription = "Stop")
-                }
-            }
             
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Row(verticalAlignment = Alignment.CenterVertically) {

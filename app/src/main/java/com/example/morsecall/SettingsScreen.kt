@@ -14,6 +14,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Info
+import com.example.morsecall.service.MorsecallServiceManager
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -108,6 +110,12 @@ fun SettingsScreen(navController: NavController) {
     var dashDuration by remember { mutableStateOf(loadDashDuration(context)) }
     var pauseDuration by remember { mutableStateOf(loadPauseDuration(context)) }
     var tapTriggerCount by remember { mutableStateOf(loadTapTriggerCount(context)) }
+    var isServiceEnabled by remember { mutableStateOf(false) }
+    
+    // Check if accessibility service is enabled
+    LaunchedEffect(Unit) {
+        isServiceEnabled = MorsecallServiceManager.isAccessibilityServiceEnabled(context)
+    }
 
     val ringtonePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -150,6 +158,53 @@ fun SettingsScreen(navController: NavController) {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // Service Status Information
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isServiceEnabled) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Info,
+                            contentDescription = null,
+                            tint = if (isServiceEnabled) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (isServiceEnabled) "Background Service Active" else "Accessibility Service Required",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = if (isServiceEnabled) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = if (isServiceEnabled) 
+                            "Morsecall can detect taps system-wide and trigger ringtones in the background."
+                        else 
+                            "Enable Morsecall in Accessibility Settings to detect taps across all apps.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (isServiceEnabled) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
+                    )
+                    if (!isServiceEnabled) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Button(
+                            onClick = {
+                                MorsecallServiceManager.openAccessibilitySettings(context)
+                            }
+                        ) {
+                            Text("Open Accessibility Settings")
+                        }
+                    }
+                }
+            }
+
             AssistChip(onClick = {}, label = { Text("Personalize your experience") }, leadingIcon = {
                 Icon(imageVector = Icons.Filled.Settings, contentDescription = null)
             })

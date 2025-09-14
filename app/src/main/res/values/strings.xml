@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Morsecall</string>
+    <string name="accessibility_service_description">Morsecall accessibility service detects taps system-wide to trigger ringtones based on consecutive tap patterns. This service runs in the background to monitor tap events across all apps.</string>
 </resources>
