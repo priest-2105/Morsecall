@@ -30,6 +30,7 @@ private const val KEY_DOT_DURATION = "dot_duration"
 private const val KEY_DASH_DURATION = "dash_duration"
 private const val KEY_PAUSE_DURATION = "pause_duration"
 private const val KEY_TAP_TRIGGER_COUNT = "tap_trigger_count"
+private const val KEY_FAKE_CALL_NAME = "fake_call_name"
 
 // Helper functions for SharedPreferences
 fun saveRingtoneUri(context: Context, uri: Uri?) {
@@ -99,19 +100,38 @@ fun loadTapTriggerCount(context: Context): Int {
     return prefs.getInt(KEY_TAP_TRIGGER_COUNT, 2) // Default 2 taps
 }
 
+fun saveFakeCallName(context: Context, name: String) {
+    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    prefs.edit().putString(KEY_FAKE_CALL_NAME, name).apply()
+    Log.d("SettingsScreen", "Saved fake call name: $name")
+}
+
+fun loadFakeCallName(context: Context): String {
+    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    return prefs.getString(KEY_FAKE_CALL_NAME, "Unknown Caller") ?: "Unknown Caller"
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(navController: NavController) {
     val context = LocalContext.current
-    
+
     var selectedRingtoneUri by remember { mutableStateOf(loadRingtoneUri(context)) }
-    var selectedRingtoneTitle by remember { mutableStateOf(getRingtoneTitle(context, selectedRingtoneUri)) }
+    var selectedRingtoneTitle by remember {
+        mutableStateOf(
+            getRingtoneTitle(
+                context,
+                selectedRingtoneUri
+            )
+        )
+    }
     var dotDuration by remember { mutableStateOf(loadDotDuration(context)) }
     var dashDuration by remember { mutableStateOf(loadDashDuration(context)) }
     var pauseDuration by remember { mutableStateOf(loadPauseDuration(context)) }
     var tapTriggerCount by remember { mutableStateOf(loadTapTriggerCount(context)) }
     var isServiceEnabled by remember { mutableStateOf(false) }
-    
+    var fakeCallName by remember { mutableStateOf(loadFakeCallName(context)) }
+
     // Check if accessibility service is enabled
     LaunchedEffect(Unit) {
         isServiceEnabled = MorsecallServiceManager.isAccessibilityServiceEnabled(context)
@@ -121,7 +141,8 @@ fun SettingsScreen(navController: NavController) {
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
-            val uri = result.data?.getParcelableExtra<Uri>(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
+            val uri =
+                result.data?.getParcelableExtra<Uri>(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
             selectedRingtoneUri = uri
             saveRingtoneUri(context, uri)
             selectedRingtoneTitle = getRingtoneTitle(context, uri)
@@ -161,6 +182,7 @@ fun SettingsScreen(navController: NavController) {
             // Service Status Information
             Card(
                 modifier = Modifier.fillMaxWidth(),
+                
                 colors = CardDefaults.cardColors(
                     containerColor = if (isServiceEnabled) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer
                 )
@@ -185,9 +207,9 @@ fun SettingsScreen(navController: NavController) {
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = if (isServiceEnabled) 
+                        text = if (isServiceEnabled)
                             "Morsecall can detect taps system-wide and trigger ringtones in the background."
-                        else 
+                        else
                             "Enable Morsecall in Accessibility Settings to detect taps across all apps.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = if (isServiceEnabled) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
@@ -205,9 +227,12 @@ fun SettingsScreen(navController: NavController) {
                 }
             }
 
-            AssistChip(onClick = {}, label = { Text("Personalize your experience") }, leadingIcon = {
-                Icon(imageVector = Icons.Filled.Settings, contentDescription = null)
-            })
+            AssistChip(
+                onClick = {},
+                label = { Text("Personalize your experience") },
+                leadingIcon = {
+                    Icon(imageVector = Icons.Filled.Settings, contentDescription = null)
+                })
 
             // Ringtone Setting Card
             ElevatedCard(
@@ -231,13 +256,13 @@ fun SettingsScreen(navController: NavController) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text("Ringtone", style = MaterialTheme.typography.titleMedium)
                         Text(
-                            selectedRingtoneTitle, 
-                            style = MaterialTheme.typography.bodyMedium, 
+                            selectedRingtoneTitle,
+                            style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.outline
                         )
                     }
                     Icon(
-                        imageVector = Icons.Filled.KeyboardArrowRight, 
+                        imageVector = Icons.Filled.KeyboardArrowRight,
                         contentDescription = "Select Ringtone"
                     )
                 }
@@ -267,7 +292,7 @@ fun SettingsScreen(navController: NavController) {
                     )
                     Slider(
                         value = dotDuration.toFloat(),
-                        onValueChange = { 
+                        onValueChange = {
                             val newDotDuration = it.toInt()
                             dotDuration = newDotDuration
                             dashDuration = newDotDuration * 3
@@ -303,7 +328,7 @@ fun SettingsScreen(navController: NavController) {
                     )
                     Slider(
                         value = tapTriggerCount.toFloat(),
-                        onValueChange = { 
+                        onValueChange = {
                             tapTriggerCount = it.toInt()
                             saveTapTriggerCount(context, tapTriggerCount)
                         },
@@ -315,6 +340,67 @@ fun SettingsScreen(navController: NavController) {
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.outline
                     )
+                }
+                // Fake Call Name Setting
+                Text(
+                    text = "Fake Call Settings",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+
+                ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(16.dp)
+                    ) {
+                        Text(
+                            text = "Caller Name",
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = fakeCallName,
+                            onValueChange = {
+                                fakeCallName = it
+                                saveFakeCallName(context, it)
+                            },
+                            label = { Text("Enter caller name") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Text(
+                            text = "This name will appear on the fake call screen",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
+                }
+
+                // Samsung Instructions
+                Text(
+                    text = "Important Instructions",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+
+                ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(16.dp)
+                    ) {
+                        Text(
+                            text = "Samsung Users - Disable Double Tap",
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "To ensure proper tap detection, disable Samsung's 'Double tap to turn screen on/off' feature:",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "1. Go to Settings → Advanced features → Motions and gestures\n2. Turn OFF 'Double tap to turn on screen'\n3. Turn OFF 'Double tap to turn off screen'",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
                 }
             }
         }

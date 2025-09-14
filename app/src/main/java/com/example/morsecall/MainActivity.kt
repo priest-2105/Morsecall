@@ -41,11 +41,14 @@ import androidx.navigation.compose.rememberNavController
 import com.example.morsecall.ui.theme.MorsecallTheme
 import com.example.morsecall.service.MorsecallServiceManager
 import com.example.morsecall.service.NotificationChannelManager
+import com.example.morsecall.service.FakeCallService
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import android.provider.Settings
+import android.content.Intent
 
 // Define navigation routes
 object AppDestinations {
@@ -57,6 +60,7 @@ class MainActivity : ComponentActivity() {
     
     companion object {
         private const val NOTIFICATION_PERMISSION_REQUEST_CODE = 1001
+        private const val OVERLAY_PERMISSION_REQUEST_CODE = 1002
     }
     
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -75,6 +79,14 @@ class MainActivity : ComponentActivity() {
                     arrayOf(Manifest.permission.POST_NOTIFICATIONS),
                     NOTIFICATION_PERMISSION_REQUEST_CODE
                 )
+            }
+        }
+        
+        // Request overlay permission for fake call
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (!Settings.canDrawOverlays(this)) {
+                val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)
+                startActivityForResult(intent, OVERLAY_PERMISSION_REQUEST_CODE)
             }
         }
         
@@ -118,15 +130,31 @@ fun MainScreen(navController: NavController) {
     // Load tap configuration settings
     val tapTriggerCount = remember { loadTapTriggerCount(context) }
     
-    // Update tap counts from service and sync state
+    // Check if accessibility service is enabled and update UI accordingly
     LaunchedEffect(Unit) {
         while (true) {
+            val currentServiceEnabled = MorsecallServiceManager.isAccessibilityServiceEnabled(context)
+            if (currentServiceEnabled != isServiceEnabled) {
+                isServiceEnabled = currentServiceEnabled
+                Log.d("MainScreen", "Service enabled state changed: $isServiceEnabled")
+                
+                // If service is disabled, deactivate the app
+                if (!isServiceEnabled && isActive) {
+                    isActive = false
+                    val service = MorsecallServiceManager.getServiceInstance()
+                    service?.setActive(false)
+                    tapLog.add(0, "⚠️ Service disabled - deactivating")
+                }
+            }
+            
+            // Update tap counts from service
             val service = MorsecallServiceManager.getServiceInstance()
             if (service != null) {
                 // Sync the active state from service
                 val serviceActive = service.isServiceActive()
                 if (serviceActive != isActive) {
                     isActive = serviceActive
+                    Log.d("MainScreen", "Service active state synced: $isActive")
                 }
                 
                 if (isActive) {
@@ -134,7 +162,8 @@ fun MainScreen(navController: NavController) {
                     consecutiveTapCount = service.getConsecutiveTapCount()
                 }
             }
-            kotlinx.coroutines.delay(500) // Update every 500ms
+            
+            kotlinx.coroutines.delay(1000) // Update every second
         }
     }
 
@@ -166,11 +195,43 @@ fun MainScreen(navController: NavController) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(16.dp),
+                .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+            verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            // Minimal, icon-forward UI
+            // Welcome Header
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.TouchApp,
+                        contentDescription = null,
+                        modifier = Modifier.size(48.dp),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Morsecall",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                    )
+                    Text(
+                        text = "System-wide tap detection for emergency calls",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
 
             // Service Status Card
             if (!isServiceEnabled) {
@@ -178,135 +239,288 @@ fun MainScreen(navController: NavController) {
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
                 ) {
                     Column(
-                        modifier = Modifier.padding(16.dp),
+                        modifier = Modifier.padding(20.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
+                        Icon(
+                            imageVector = Icons.Filled.Settings,
+                            contentDescription = null,
+                            modifier = Modifier.size(32.dp),
+                            tint = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
                         Text(
                             text = "Accessibility Service Required",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onErrorContainer
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = "Enable Morsecall in Accessibility Settings to detect taps system-wide",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.9f),
                             textAlign = TextAlign.Center
                         )
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
                         Button(
                             onClick = {
                                 MorsecallServiceManager.openAccessibilitySettings(context)
                                 tapLog.add(0, "🔧 Opening Accessibility Settings")
-                            }
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.onErrorContainer,
+                                contentColor = MaterialTheme.colorScheme.errorContainer
+                            )
                         ) {
-                            Text("Open Settings")
+                            Text("Open Settings", fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
                         }
                     }
                 }
-                Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // Activate/Deactivate Button
-            // Circular power toggle
-            FilledTonalIconButton(
-                onClick = { 
-                    if (!isServiceEnabled) {
-                        tapLog.add(0, "⚠️ Enable accessibility service first")
-                        return@FilledTonalIconButton
-                    }
-                    
-                    val service = MorsecallServiceManager.getServiceInstance()
-                    if (service == null) {
-                        tapLog.add(0, "⚠️ Accessibility service not connected")
-                        return@FilledTonalIconButton
-                    }
-                    
-                    isActive = !isActive
-                    service.setActive(isActive)
-                    
-                    if (isActive) {
-                        tapLog.add(0, "✅ Background Service ACTIVATED")
-                        Log.d("MORSE_TAP", "Background service activated")
-                    } else {
-                        tapLog.add(0, "❌ Background Service DEACTIVATED")
-                        Log.d("MORSE_TAP", "Background service deactivated")
-                    }
-                },
-                modifier = Modifier.size(80.dp),
-                colors = IconButtonDefaults.filledTonalIconButtonColors(
-                    containerColor = if (isActive) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = if (isActive) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.Power,
-                    contentDescription = if (isActive) "Deactivate" else "Activate",
-                    modifier = Modifier.size(36.dp)
-                )
-            }
-
-            // Status Display Card
+            // Activation Control Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
-                    containerColor = if (isActive) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
-                )
+                    containerColor = when {
+                        !isServiceEnabled -> MaterialTheme.colorScheme.surfaceVariant
+                        isActive -> MaterialTheme.colorScheme.errorContainer
+                        else -> MaterialTheme.colorScheme.primaryContainer
+                    }
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
             ) {
                 Column(
                     modifier = Modifier.padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.TouchApp,
-                        contentDescription = "Tap Detection",
-                        modifier = Modifier.size(48.dp),
-                        tint = if (isActive) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
+                ) {
+                    // Power Button
+                    FilledTonalIconButton(
+                        onClick = { 
+                            if (!isServiceEnabled) {
+                                tapLog.add(0, "⚠️ Enable accessibility service first")
+                                return@FilledTonalIconButton
+                            }
+                            
+                            val service = MorsecallServiceManager.getServiceInstance()
+                            if (service == null) {
+                                tapLog.add(0, "⚠️ Accessibility service not connected - please restart app")
+                                return@FilledTonalIconButton
+                            }
+                            
+                            isActive = !isActive
+                            service.setActive(isActive)
+                            
+                            if (isActive) {
+                                tapLog.add(0, "✅ Background Service ACTIVATED")
+                                Log.d("MORSE_TAP", "Background service activated")
+                            } else {
+                                tapLog.add(0, "❌ Background Service DEACTIVATED")
+                                Log.d("MORSE_TAP", "Background service deactivated")
+                            }
+                        },
+                        modifier = Modifier.size(100.dp),
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = when {
+                                !isServiceEnabled -> MaterialTheme.colorScheme.surfaceVariant
+                                isActive -> MaterialTheme.colorScheme.onErrorContainer
+                                else -> MaterialTheme.colorScheme.onPrimaryContainer
+                            },
+                            contentColor = when {
+                                !isServiceEnabled -> MaterialTheme.colorScheme.onSurfaceVariant
+                                isActive -> MaterialTheme.colorScheme.errorContainer
+                                else -> MaterialTheme.colorScheme.primaryContainer
+                            }
+                        ),
+                        enabled = isServiceEnabled
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Power,
+                            contentDescription = when {
+                                !isServiceEnabled -> "Enable accessibility service first"
+                                isActive -> "Deactivate"
+                                else -> "Activate"
+                            },
+                            modifier = Modifier.size(48.dp)
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    // Status Text
                     Text(
-                        text = if (isActive) "System-wide tap detection active" else "Tap detection inactive",
+                        text = when {
+                            !isServiceEnabled -> "Service Not Enabled"
+                            isActive -> "Service Active"
+                            else -> "Service Ready"
+                        },
                         style = MaterialTheme.typography.titleMedium,
-                        color = if (isActive) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = when {
+                            !isServiceEnabled -> MaterialTheme.colorScheme.onSurfaceVariant
+                            isActive -> MaterialTheme.colorScheme.onErrorContainer
+                            else -> MaterialTheme.colorScheme.onPrimaryContainer
+                        },
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                    )
+                    
+                    Text(
+                        text = when {
+                            !isServiceEnabled -> "Enable accessibility service to start"
+                            isActive -> "Tap detection is running system-wide"
+                            else -> "Ready to activate tap detection"
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = when {
+                            !isServiceEnabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                            isActive -> MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f)
+                            else -> MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                        },
                         textAlign = TextAlign.Center
                     )
-                    if (isActive) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Tap anywhere on your device to trigger ringtone",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            textAlign = TextAlign.Center
-                        )
+                }
+            }
+
+            // Tap Counter Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp)
+                ) {
+                    Text(
+                        text = "Tap Statistics",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Total Taps
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer
+                            ),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.History,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "$tapCount",
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Total Taps",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                                )
+                            }
+                        }
+                        
+                        Spacer(modifier = Modifier.width(12.dp))
+                        
+                        // Consecutive Taps
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (consecutiveTapCount >= 1) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceVariant
+                            ),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Speed,
+                                    contentDescription = null,
+                                    tint = if (consecutiveTapCount >= 1) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "$consecutiveTapCount/$tapTriggerCount",
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    color = if (consecutiveTapCount >= 1) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Consecutive",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (consecutiveTapCount >= 1) MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                                )
+                            }
+                        }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
-            
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(imageVector = Icons.Filled.History, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.width(6.dp))
-                    Text(text = "$tapCount", style = MaterialTheme.typography.titleMedium)
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(imageVector = Icons.Filled.Speed, contentDescription = null, tint = if (consecutiveTapCount >= 1) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.width(6.dp))
-                    Text(text = "$consecutiveTapCount/$tapTriggerCount", style = MaterialTheme.typography.titleMedium, color = if (consecutiveTapCount >= 1) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-
+            // Activity Log Card
             if (tapLog.isNotEmpty()) {
-                Divider()
-                Text("Recent activity", style = MaterialTheme.typography.titleMedium)
-                LazyColumn(modifier = Modifier.heightIn(max = 220.dp)) {
-                    items(tapLog.take(10)) { logEntry ->
-                        Text(logEntry, fontSize = 12.sp, modifier = Modifier.padding(vertical = 6.dp))
-                        Divider()
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.History,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Recent Activity",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        LazyColumn(
+                            modifier = Modifier.heightIn(max = 200.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            items(tapLog.take(8)) { logEntry ->
+                                Text(
+                                    text = logEntry,
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                                    modifier = Modifier.padding(vertical = 2.dp)
+                                )
+                            }
+                        }
                     }
                 }
             }

@@ -146,13 +146,16 @@ class MorsecallAccessibilityService : AccessibilityService() {
             ringtone?.play()
             isPlaying = true
             
+            // Show fake call overlay
+            FakeCallService.showFakeCall(this)
+            
             // Stop ringtone after 5 seconds
             serviceScope.launch {
                 delay(5000)
                 stopRingtone()
             }
             
-            Log.d(TAG, "Ringtone started")
+            Log.d(TAG, "Ringtone started and fake call shown")
         }
     }
     

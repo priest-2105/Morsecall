@@ -30,7 +30,11 @@ object MorsecallServiceManager {
     
     fun openAccessibilitySettings(context: Context) {
         try {
-            val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+            val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+                // Add extra to help scroll to our service
+                putExtra("extra_prefs_show_button_bar", true)
+                putExtra("extra_prefs_show_button_bar_positive", "Enable Morsecall")
+            }
             intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
             context.startActivity(intent)
             Log.d(TAG, "Opened accessibility settings")
