@@ -5,21 +5,31 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.gestures.GestureCancellationException
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.rounded.Power
+import androidx.compose.material.icons.filled.TouchApp
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
@@ -94,27 +104,27 @@ fun MainScreen(navController: NavController) {
         }
     }
 
+    val appBarState = TopAppBarDefaults.enterAlwaysScrollBehavior()
+
     Scaffold(
+        modifier = Modifier.nestedScroll(appBarState.nestedScrollConnection),
         topBar = {
-            TopAppBar(
-                title = { Text("MorseCall") },
+            CenterAlignedTopAppBar(
+                title = { Text("MorseCall", style = MaterialTheme.typography.titleLarge) },
                 actions = {
                     IconButton(onClick = {
-                        // Navigate to Settings Screen
                         navController.navigate(AppDestinations.SETTINGS_SCREEN)
                         Log.d("MainScreen", "Settings button clicked, navigating to settings")
                     }) {
-                        Icon(
-                            imageVector = Icons.Filled.Settings,
-                            contentDescription = "Settings"
-                        )
+                        Icon(imageVector = Icons.Filled.Settings, contentDescription = "Settings")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    actionIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                ),
+                scrollBehavior = appBarState
             )
         }
     ) { innerPadding ->
@@ -124,33 +134,13 @@ fun MainScreen(navController: NavController) {
                 .padding(innerPadding)
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceAround
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            Text(
-                text = "Tap the button below in your Morse pattern.",
-                fontSize = 18.sp,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(bottom = 10.dp)
-            )
-            
-            Text(
-                text = "Sensitivity: ${
-                    when {
-                        dotDuration <= 150 -> "Very Fast"
-                        dotDuration <= 250 -> "Fast"
-                        dotDuration <= 350 -> "Normal"
-                        dotDuration <= 450 -> "Slow"
-                        else -> "Very Slow"
-                    }
-                }",
-                fontSize = 12.sp,
-                textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.outline,
-                modifier = Modifier.padding(bottom = 10.dp)
-            )
+            // Minimal, icon-forward UI
 
             // Activate/Deactivate Button
-            Button(
+            // Circular power toggle
+            FilledTonalIconButton(
                 onClick = { 
                     isActive = !isActive
                     if (isActive) {
@@ -173,18 +163,20 @@ fun MainScreen(navController: NavController) {
                         Log.d("MORSE_TAP", "App deactivated and counters reset")
                     }
                 },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isActive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-                ),
-                modifier = Modifier.padding(bottom = 20.dp)
+                modifier = Modifier.size(80.dp),
+                colors = IconButtonDefaults.filledTonalIconButtonColors(
+                    containerColor = if (isActive) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = if (isActive) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer
+                )
             ) {
-                Text(
-                    text = if (isActive) "DEACTIVATE" else "ACTIVATE",
-                    fontSize = 16.sp,
-                    color = MaterialTheme.colorScheme.onPrimary
+                Icon(
+                    imageVector = Icons.Rounded.Power,
+                    contentDescription = if (isActive) "Deactivate" else "Activate",
+                    modifier = Modifier.size(36.dp)
                 )
             }
 
+            // Animated pulse on the main tap area
             Button(
                 onClick = {
                     if (isActive) {
@@ -195,7 +187,7 @@ fun MainScreen(navController: NavController) {
                         val timeSinceLastTap = if (lastTapTime != 0L) currentTime - lastTapTime else 0L
                         if (timeSinceLastTap < 3000 && timeSinceLastTap > 0) {
                             consecutiveTapCount++
-                                                    if (consecutiveTapCount >= tapTriggerCount) {
+                            if (consecutiveTapCount >= tapTriggerCount) {
                             // Play ringtone after configured number of consecutive taps
                             ringtone?.play()
                             isPlaying = true
@@ -216,16 +208,35 @@ fun MainScreen(navController: NavController) {
                         Log.d("MORSE_TAP", "Tap ignored - app not active")
                     }
                 },
-                shape = MaterialTheme.shapes.medium,
+                shape = MaterialTheme.shapes.large,
+                modifier = run {
+                    val base = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp)
+                    if (isActive) {
+                        val infinite = rememberInfiniteTransition(label = "pulse")
+                        val scale = infinite.animateFloat(
+                            initialValue = 0.98f,
+                            targetValue = 1.02f,
+                            animationSpec = infiniteRepeatable(
+                                animation = tween(durationMillis = 800),
+                                repeatMode = RepeatMode.Reverse
+                            ),
+                            label = "scale"
+                        )
+                        base.graphicsLayer(scaleX = scale.value, scaleY = scale.value)
+                    } else base
+                },
+                enabled = true,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-                ),
-                enabled = true
+                    containerColor = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+                )
             ) {
-                Text(
-                    text = if (isActive) "TAP HERE" else "TAP HERE (INACTIVE)",
-                    fontSize = 32.sp,
-                    color = if (isActive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                Icon(
+                    imageVector = Icons.Filled.TouchApp,
+                    contentDescription = "Tap",
+                    tint = if (isActive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(40.dp)
                 )
             }
 
@@ -233,41 +244,43 @@ fun MainScreen(navController: NavController) {
             
             // Stop Button (only shows when ringtone is playing)
             if (isPlaying) {
-                Button(
+                FilledTonalIconButton(
                     onClick = {
                         ringtone?.stop()
                         isPlaying = false
                         tapLog.add(0, "⏹️ RINGTONE STOPPED")
                         Log.d("MORSE_TAP", "Ringtone stopped manually")
                     },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error
+                    colors = IconButtonDefaults.filledTonalIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer
                     ),
                     modifier = Modifier.padding(bottom = 10.dp)
                 ) {
-                    Text(
-                        text = "STOP RINGTONE",
-                        fontSize = 16.sp,
-                        color = MaterialTheme.colorScheme.onError
-                    )
+                    Icon(imageVector = Icons.Filled.Stop, contentDescription = "Stop")
                 }
             }
             
-            Text(
-                text = "Total Taps: $tapCount",
-                fontSize = 16.sp
-            )
-            Text(
-                text = "Consecutive Taps: $consecutiveTapCount/$tapTriggerCount",
-                fontSize = 14.sp,
-                color = if (consecutiveTapCount >= 1) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-            )
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(imageVector = Icons.Filled.History, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.width(6.dp))
+                    Text(text = "$tapCount", style = MaterialTheme.typography.titleMedium)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(imageVector = Icons.Filled.Speed, contentDescription = null, tint = if (consecutiveTapCount >= 1) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.width(6.dp))
+                    Text(text = "$consecutiveTapCount/$tapTriggerCount", style = MaterialTheme.typography.titleMedium, color = if (consecutiveTapCount >= 1) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+
             if (tapLog.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(10.dp))
-                Text("Recent Activity:", fontSize = 14.sp, style = MaterialTheme.typography.titleSmall)
-                Column(modifier = Modifier.heightIn(max = 200.dp)) {
-                    tapLog.take(5).forEach { logEntry ->
-                        Text(logEntry, fontSize = 12.sp)
+                Divider()
+                Text("Recent activity", style = MaterialTheme.typography.titleMedium)
+                LazyColumn(modifier = Modifier.heightIn(max = 220.dp)) {
+                    items(tapLog.take(10)) { logEntry ->
+                        Text(logEntry, fontSize = 12.sp, modifier = Modifier.padding(vertical = 6.dp))
+                        Divider()
                     }
                 }
             }

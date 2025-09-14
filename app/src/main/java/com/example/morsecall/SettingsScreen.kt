@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -122,8 +123,8 @@ fun SettingsScreen(navController: NavController) {
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Settings") },
+            CenterAlignedTopAppBar(
+                title = { Text("Settings", style = MaterialTheme.typography.titleLarge) },
                 navigationIcon = {
                     IconButton(onClick = {
                         navController.navigateUp()
@@ -134,10 +135,10 @@ fun SettingsScreen(navController: NavController) {
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             )
         }
@@ -149,14 +150,12 @@ fun SettingsScreen(navController: NavController) {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text(
-                text = "Configure your preferences",
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
+            AssistChip(onClick = {}, label = { Text("Personalize your experience") }, leadingIcon = {
+                Icon(imageVector = Icons.Filled.Settings, contentDescription = null)
+            })
 
             // Ringtone Setting Card
-            Card(
+            ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
                 onClick = {
                     val intent = Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
@@ -197,7 +196,7 @@ fun SettingsScreen(navController: NavController) {
             )
 
             // Simple Sensitivity Slider
-            Card(modifier = Modifier.fillMaxWidth()) {
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
                 Column(
                     modifier = Modifier.padding(16.dp)
                 ) {
@@ -239,7 +238,7 @@ fun SettingsScreen(navController: NavController) {
             )
 
             // Tap Trigger Count Slider
-            Card(modifier = Modifier.fillMaxWidth()) {
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
                 Column(
                     modifier = Modifier.padding(16.dp)
                 ) {

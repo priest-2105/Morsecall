@@ -4,6 +4,7 @@ import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
@@ -53,6 +54,13 @@ fun MorsecallTheme(
     MaterialTheme(
         colorScheme = colorScheme,
         typography = Typography,
+        shapes = Shapes(
+            extraSmall = androidx.compose.foundation.shape.RoundedCornerShape(6),
+            small = androidx.compose.foundation.shape.RoundedCornerShape(10),
+            medium = androidx.compose.foundation.shape.RoundedCornerShape(16),
+            large = androidx.compose.foundation.shape.RoundedCornerShape(24),
+            extraLarge = androidx.compose.foundation.shape.RoundedCornerShape(28)
+        ),
         content = content
     )
 }
